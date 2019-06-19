@@ -2,7 +2,7 @@
 # Helper.py
 # Version:  ArcGIS 10.3.1 / Python 2.7.8
 # Creation Date: 2017-08-08
-# Last Edit: 2018-12-12
+# Last Edit: 2019-06-19
 # Creator:  Kirsten R. Hazler
 
 # Summary:
@@ -24,6 +24,12 @@ from datetime import datetime as datetime
 # Set overwrite option so that existing data may be overwritten
 arcpy.env.overwriteOutput = True
 
+def getRect(spatialObject):
+   '''Gets the extent rectangle needed for some other operations (e.g., clipping a raster to a feature class).
+   '''
+   ext = arcpy.Describe(spatialObject).extent
+   rect = "%s %s %s %s" %(ext.XMin, ext.YMin, ext.XMax, ext.YMax)
+   return rect
 
 def getScratchMsg(scratchGDB):
    '''Prints message informing user of where scratch output will be written'''

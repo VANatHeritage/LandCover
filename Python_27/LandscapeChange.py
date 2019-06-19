@@ -2,7 +2,7 @@
 # LandscapeChange.py
 # Version:  ArcGIS 10.3 / Python 2.7
 # Creation Date: 2019-06-05
-# Last Edit: 2019-06-18
+# Last Edit: 2019-06-19
 # Creator:  Kirsten R. Hazler
 # ---------------------------------------------------------------------------
 
@@ -13,17 +13,12 @@ from arcpy.sa import *
 arcpy.CheckOutExtension("Spatial")
 
 
-def getRect(spatialObject):
-   ext = arcpy.Describe(spatialObject).extent
-   rect = "%s %s %s %s" %(ext.XMin, ext.YMin, ext.XMax, ext.YMax)
-   return rect
-
 def addCoverClass(inTab, schema):
    '''To input table, adds a field indicating cover classes for each code in the "Value" field.
    
    Parameters:
    - inTab: input table (can be a standalone table or a standalone table)
-   - schema: NLCD or Gen (general) codes
+   - schema: NLCD or Gen (general) codes [may want to add additional schemas at some point]
    '''
    
    if schema == "NLCD":   
@@ -74,7 +69,7 @@ def TabLcTypes(rasterList, sumTab, clipShp = None):
    Assumptions:
    - Input rasters are in GDB format, and all cover the exact same area. 
    - Naming convention of input rasters is "lc_yyyy*", so the year can be reliably extracted.
-   - All input rasters are already clipped, or all need to be clipped (no mixture).
+   - All input rasters are already clipped, or all need to be clipped (no mixture of clipped and unclipped).
    - If a clipping feature class is used, it's assumed to be in the same coordinate system as the input rasters.
    
    Parameters:
@@ -170,7 +165,6 @@ def TabLcTypes(rasterList, sumTab, clipShp = None):
    printMsg('Finished.')
    return sumTab
 
-  
 def reclassBarren(refRast, schema, inRast, outRast, cmap = None): 
    '''For NLCD data: reclassifies the 31 (Barren) land cover class to 31 (for "natural barrens") or 32 (for "anthropogenic barrens"), based on a reference raster from a prior year.
    Parameters:
@@ -179,7 +173,10 @@ def reclassBarren(refRast, schema, inRast, outRast, cmap = None):
    - inRast: the raster for which the barren class should be reclassified
    - out Rast: the updated raster with the barren class split into two types   
    '''
-   # Reclassify reference raster to likeliest transition (to 31 or 32 IF inRast is classified as 31)
+   # Reclassify reference raster to likeliest transition, only applicable IF the current raster is classed as barren. 
+   # Rationale: If it was forest and is now barren, it is probably due to clearing, e.g. for mining (anthropogenic). If it was agriculture and is now barren, it may be due to clearing for development (anthropogenic). If it was water or wetland and is now barren, it is probably simply due to the shifting mosaic of barrier island habitats, and is now sand (natural). Etc. 
+   # None of this matters if the current raster is anything other than 31.
+
    refRast_rcls = refRast + '_rcls'
    if schema == '1992':
       rclsTab = "0 NODATA;11 31;21 32;22 32;23 32;31 31;32 32;33 32;41 32;42 32;43 32;51 32;61 32;71 32;81 32;82 32;83 32;84 32;85 32;91 31;92 31"
@@ -189,16 +186,19 @@ def reclassBarren(refRast, schema, inRast, outRast, cmap = None):
    arcpy.gp.Reclassify_sa(refRast, "Value", rclsTab, refRast_rcls, "DATA")
    
    # Apply a majority filter to the reclassified reference raster
+   # This is to get rid of the effect of errant speckles
    refRast_filt = refRast + '_filt'
    printMsg('Applying majority filter...')
    arcpy.gp.FocalStatistics_sa(refRast_rcls, refRast_filt, "Rectangle 3 3 CELL", "MAJORITY", "DATA")
    
    # Expand the 31 class in the reclassified, filtered reference raster
+   # This is to give the "natural" barren class additional leverage near shorelines
    exp31 = refRast + '_exp31'
    printMsg('Expanding 31 class...')
    arcpy.gp.Expand_sa(refRast_filt, exp31, "3", "31")
    
    # Get Euclidean distance to the 32 class in reference raster
+   # If it's close to anthropogenic clearing, new barren land is more likely to be anthropogenic.
    refRast_32 = refRast + '_32'
    printMsg('Creating raster for 32 class...')
    arcpy.gp.SetNull_sa(refRast, "32", refRast_32, "Value <>32")
@@ -208,6 +208,13 @@ def reclassBarren(refRast, schema, inRast, outRast, cmap = None):
    arcpy.gp.EucDistance_sa(refRast_32, eDist32, "", "30", "")
    
    # Apply series of if/then statements to get final classification
+   # In English pseudocode:
+   # If the current pixel is NOT coded 31: keep its original class code
+   # Else:
+   #     If the reference pixel is 31: keep as 31
+   #     Else if the reference pixel is 32: recode to 32
+   #     Else if the distance to a reference pixel coded 32 is less than 100 meters: recode to 32
+   #     Else: recode to the most likely transition, determined from the "exp31" raster
    printMsg('Applying final raster calculation...')
    inRast = Raster(inRast)
    refRast = Raster(refRast)
@@ -230,12 +237,21 @@ def reclassBarren(refRast, schema, inRast, outRast, cmap = None):
    return outRast
    
 def ReclassGeneral (inRast, outRast, cmap = None):
-   '''Reclassifies NLCD data to more general land cover types.
+   '''Reclassifies NLCD data to more general land cover types. 
+   
+   Assumption: Barren Land class (NLCD code 31) has already been split into Barren, Anthropogenic (32) and Barren, Natural (31)
    
    Parameters:
    - inRast: Input raster to be reclassified
    - outRast: Output raster that has been reclassified
    - cmap: A colormap to apply to the output raster (optional)
+   
+   Reclassification schema:
+   - 1 (Open Water) includes NLCD code 11 only
+   - 2 (Developed) includes NLCD codes 21, 22, 23, 24, and 32
+   - 3 (Agriculture) includes NLCD codes 81 and 82
+   - 4 (Natural) includes NLCD codes 31, 41, 42, 43, 90, 95
+   - 5 (Successional) includes NLCD codes 52 and 71
    '''
    # Reclassify data
    rclsTab = "0 NODATA;11 1;21 2;22 2;23 2;24 2; 31 4;32 2;41 4;42 4;43 4;52 5;71 5;81 3;82 3;90 4;95 4"
