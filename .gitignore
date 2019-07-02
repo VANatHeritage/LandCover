@@ -1,0 +1,20 @@
+# General
+# gitignore
+*.xml
+*.idea
+
+# Python
+*.pyc
+
+# R files
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+
+# RStudio project
+*.Rproj
+.Rproj.user
+*.Rdata
