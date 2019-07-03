@@ -94,7 +94,7 @@ in_nlcd_class = "landcover_classified_clean"
 if impervious_raster:
    in_nlcd = arcpy.Clip_management(impervious_raster, "#", "nlcdcliptemp", extent_shp, "#", "ClippingGeometry")
    inraster = "nlcdcliptemp"
-   where_clause = "Value = 0"
+   where_clause = "Value = 127"
    false_raster = inraster
    output_raster = "impsur"
    outsetNull = SetNull(inraster, false_raster, where_clause)
@@ -209,7 +209,7 @@ print("done reclassifying")
 
 # get list of binary rasters and add impervious and canopy if necessary
 # proj_source = arcpy.ListRasters('nlcd*')
-proj_source = ['nlcdwet', 'nlcdopn', 'nlcdwat', 'nlcdshb', 'nlcddfr', 'nlcddfr', 'nlcdefr']
+proj_source = ['nlcdwet', 'nlcdopn', 'nlcdwat', 'nlcdshb', 'nlcddfr', 'nlcdefr']
 if impervious_raster:
    proj_source.append(in_impervious)
 if canopy_raster:
@@ -221,7 +221,7 @@ ngb_type = [NbrRectangle(3, 3, "CELL"), NbrCircle(10, "CELL"), NbrCircle(100, "C
 ngb_ls = [i for i in range(0, len(ngb_nm))]
 
 for raster in proj_source:
-   print("Preparing to calculate focal statistics for " + raster + "...")
+   print("Calculating focal statistics for " + raster + "...")
 
    for n in ngb_ls:
       out_raster = project_dir + os.sep + raster + ngb_nm[n] + '.tif'
@@ -230,7 +230,12 @@ for raster in proj_source:
       outFocal = FocalStatistics(raster, type, "MEAN", "DATA")
       outFocal = Con(IsNull(outFocal), 0, outFocal)
       outFocal = ExtractByMask(outFocal, mask)
-      outFocal = Int((outFocal * 10000) + 0.5)
+      if raster in ['impsur', 'nlcddfr', 'nlcdefr']:
+         # these have initial max value of 100
+         outFocal = Int((outFocal * 100) + 0.5)
+      else:
+         # these have initial max value of 1
+         outFocal = Int((outFocal * 10000) + 0.5)
       outFocal.save(out_raster)
       print("Finished with neighborhood " + ngb_nm[n] + ".")
 
