@@ -79,37 +79,28 @@ extent_shp = arcpy.Buffer_analysis(in_features=extent_shp, out_feature_class="nl
                                    buffer_distance_or_field="5000 Meters", dissolve_option="ALL")
 # arcpy.env.extent = extent_shp (not necessary)
 
-# clean (clip and set null) rasters
+# clean (clip and set null) rasters (NA values are different for each layer)
 # nlcd classified
 in_nlcd = arcpy.Clip_management(nlcd_classified, "#", "nlcdcliptemp", extent_shp, "#", "ClippingGeometry")
-inraster = "nlcdcliptemp"
 where_clause = "Value = 0"
-false_raster = inraster
-output_raster = "landcover_classified_clean"
-outsetNull = SetNull(inraster, false_raster, where_clause)
-outsetNull.save(output_raster)
+outsetNull = SetNull("nlcdcliptemp", "nlcdcliptemp", where_clause)
+outsetNull.save("landcover_classified_clean")
 in_nlcd_class = "landcover_classified_clean"
 
 # impervious
 if impervious_raster:
    in_nlcd = arcpy.Clip_management(impervious_raster, "#", "nlcdcliptemp", extent_shp, "#", "ClippingGeometry")
-   inraster = "nlcdcliptemp"
    where_clause = "Value = 127"
-   false_raster = inraster
-   output_raster = "impsur"
-   outsetNull = SetNull(inraster, false_raster, where_clause)
-   outsetNull.save(output_raster)
+   outsetNull = SetNull("nlcdcliptemp", "nlcdcliptemp", where_clause)
+   outsetNull.save("impsur")
    in_impervious = "impsur"
 
 # canopy
 if canopy_raster:
    in_nlcd = arcpy.Clip_management(canopy_raster, "#", "nlcdcliptemp", extent_shp, "#", "ClippingGeometry")
-   inraster = "nlcdcliptemp"
-   where_clause = "Value = 0"
-   false_raster = inraster
-   output_raster = "canopy"
-   outsetNull = SetNull(inraster, false_raster, where_clause)
-   outsetNull.save(output_raster)
+   where_clause = "Value = 255"
+   outsetNull = SetNull("nlcdcliptemp", "nlcdcliptemp", where_clause)
+   outsetNull.save("canopy")
    in_canopy = "canopy"
 
 arcpy.Delete_management("nlcdcliptemp")
@@ -173,42 +164,39 @@ remap_evermix = RemapValue(
    [[11, 0], [12, 0], [21, 0], [22, 0], [23, 0], [24, 0], [31, 0], [41, 0], [42, 100], [43, 50], [52, 0], [71, 0],
     [81, 0], [82, 0], [90, 0], [95, 0]])
 
-inraster = in_nlcd_class
-
 # Step 2 - Reclass the rasters for each desired land type
 reclass_field = "Value"
 
-# out_reclassify_forest = Reclassify(inraster, reclass_field, remap_forest, "NODATA")
+# out_reclassify_forest = Reclassify(in_nlcd_class, reclass_field, remap_forest, "NODATA")
 # out_reclassify_forest.save(project_nm + "_b_forest_n")
 
-out_reclassify_wetland = Reclassify(inraster, reclass_field, remap_wetland, "NODATA")
+out_reclassify_wetland = Reclassify(in_nlcd_class, reclass_field, remap_wetland, "NODATA")
 out_reclassify_wetland.save('nlcdwet')
 
-out_reclassify_open = Reclassify(inraster, reclass_field, remap_Open, "NODATA")
+out_reclassify_open = Reclassify(in_nlcd_class, reclass_field, remap_Open, "NODATA")
 out_reclassify_open.save('nlcdopn')
 
-out_reclassify_water = Reclassify(inraster, reclass_field, remap_water, "NODATA")
+out_reclassify_water = Reclassify(in_nlcd_class, reclass_field, remap_water, "NODATA")
 out_reclassify_water.save('nlcdwat')
 
-out_reclassify_ShrubScrub = Reclassify(inraster, reclass_field, remap_ShrubScrub, "NODATA")
+out_reclassify_ShrubScrub = Reclassify(in_nlcd_class, reclass_field, remap_ShrubScrub, "NODATA")
 out_reclassify_ShrubScrub.save('nlcdshb')
 
 #########Added 2017 - Split the forest into evergreen/mixed forest and deciduous/mixed forest
 
-# out_reclassify_Evergreen = Reclassify(inraster, reclass_field, remap_evergreen, "NODATA")
+# out_reclassify_Evergreen = Reclassify(in_nlcd_class, reclass_field, remap_evergreen, "NODATA")
 # out_reclassify_Evergreen.save(project_nm + "_b_evergreen_n")
 
-out_reclassify_decidmix = Reclassify(inraster, reclass_field, remap_decidmix, "NODATA")
+out_reclassify_decidmix = Reclassify(in_nlcd_class, reclass_field, remap_decidmix, "NODATA")
 out_reclassify_decidmix.save('nlcddfr')
 
-out_reclassify_Evermix = Reclassify(inraster, reclass_field, remap_evermix, "NODATA")
+out_reclassify_Evermix = Reclassify(in_nlcd_class, reclass_field, remap_evermix, "NODATA")
 out_reclassify_Evermix.save('nlcdefr')
 
 print("done reclassifying")
 # Step 3: Calculate focal statistics
 
 # get list of binary rasters and add impervious and canopy if necessary
-# proj_source = arcpy.ListRasters('nlcd*')
 proj_source = ['nlcdwet', 'nlcdopn', 'nlcdwat', 'nlcdshb', 'nlcddfr', 'nlcdefr']
 if impervious_raster:
    proj_source.append(in_impervious)
