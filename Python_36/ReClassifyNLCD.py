@@ -39,17 +39,17 @@ from arcpy.sa import *
 # working directory (project folder created here)
 wd = r'D:\scratch\arc_wd'
 # project folder name
-project_nm = 'nlcd_2016'
+project_nm = 'nlcd_2011'
 
 # study extent
-extent_shp = r'E:\arcmap_wd\scratch.gdb\sdmVA_pred_area'
+extent_shp = r'D:\SDM\all_projects\_data\other_spatial\feature\sdmVA_pred_20170131_10kmBuff.shp'
 
 # input raster(s). Set None for ones not used
 nlcd_classified = r'L:\David\GIS_data\NLCD\nlcd_2016\nlcd_2016ed_LandCover_albers.gdb\lc_2016'
 impervious_raster = r'L:\David\GIS_data\NLCD\nlcd_2016\nlcd_2016ed_Impervious_albers.gdb\imperv_2016'
-canopy_raster = None
+# canopy_raster = r'L:\David\GIS_data\NLCD\treecan2016.tif\treecan2016.tif'
 
-# (optional) mask
+# mask, also used as the snap raster and output CRS
 mask = r'E:\projects\SDM_ancilliary\Hypergrid\VA_methods\raster\_masks\data_mask.tif'
 
 # end variables
@@ -72,11 +72,12 @@ arcpy.env.workspace = str(out_gdb)
 arcpy.env.overwriteOutput = True
 arcpy.env.snapRaster = mask
 arcpy.env.outputCoordinateSystem = mask
+arcpy.env.cellSize = mask
 
 # buffer extent feature
 # skip if already buffered
-extent_shp = arcpy.Buffer_analysis(in_features=extent_shp, out_feature_class="nlcdprocextent",
-                                   buffer_distance_or_field="5000 Meters", dissolve_option="ALL")
+# extent_shp = arcpy.Buffer_analysis(in_features=extent_shp, out_feature_class="nlcdprocextent",
+#                                    buffer_distance_or_field="5000 Meters", dissolve_option="ALL")
 # arcpy.env.extent = extent_shp (not necessary)
 
 # clean (clip and set null) rasters (NA values are different for each layer)
@@ -218,7 +219,7 @@ for raster in proj_source:
       outFocal = FocalStatistics(raster, type, "MEAN", "DATA")
       outFocal = Con(IsNull(outFocal), 0, outFocal)
       outFocal = ExtractByMask(outFocal, mask)
-      if raster in ['impsur', 'nlcddfr', 'nlcdefr']:
+      if raster in ['impsur', 'canopy', 'nlcddfr', 'nlcdefr']:
          # these have initial max value of 100
          outFocal = Int((outFocal * 100) + 0.5)
       else:
@@ -233,3 +234,5 @@ for raster in proj_source:
 if arcpy.Exists("maskfinal"):
    arcpy.Delete_management("maskfinal")
 arcpy.Delete_management("nlcdprocextent")
+
+arcpy.BuildPyramidsandStatistics_management(project_dir)

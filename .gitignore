@@ -2,6 +2,7 @@
 # gitignore
 *.xml
 *.idea
+plots
 
 # Python
 *.pyc
